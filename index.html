@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<head>
+  <link type="text/css" rel="stylesheet" href="code.jquery.com/ui/1.9.2/themes/base/jquery-ui.css">
+  <script type="text/javascript" src="code.jquery.com/jquery-1.8.3.js"></script>
+  <script type="text/javascript" src="code.jquery.com/ui/1.9.2/jquery-ui.js"></script>
+  
+  <script src="cdnjs.cloudflare.com/ajax/libs/jqueryui-touch-punch/0.2.3/jquery.ui.touch-punch.min.js"></script>
+  <script src="./abc.js"></script>
+  <script src="unpkg.com/tone@14.7.39/build/Tone.js"></script>
+
+  <!-- 
+  <!link type="text/css" rel="stylesheet" href="http://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.css">
+  <!script type="text/javascript" src="http://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.js">
+  <!script src="./Tone.js">
+  <!script src="./jquery.ui.touch-punch.min.js">
+  <!script src="http://unpkg.com/tone@13.8.25/build/Tone.js"></script>
+  -->
+
+  <script type="text/javascript">
+  var all_note_org = ["G3", "G#3", "A3", "A#3", "B3", "C4", "C#4", "D4", "D#4", "E4", "F4", "F#4", "G4", "G#4", "A4", "A#4", "B4", "C5", "C#5", "D5", "D#5", "E5", "-", "."];
+  var all_note = ["ソ", "ソ#", "ラ", "ラ#", "シ", "ド", "ド#", "レ", "レ#", "ミ", "ファ", "ファ#", "ソ", "ソ#", "ラ", "ラ#", "シ", "ド", "ド#", "レ", "レ#", "ミ", "－", " "];
+  var cnv_note_org = ["G3", "A3", "B3", "C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5", "D5", "E5", "-", "."];
+/*
+  var durList = ["8n", "4n", "4n.", "2n", "?", "2n.", "?", "1m", "?", "?", "?", "1m.", "?", "?", "?", "2m"];
+*/
+  var durList = [];
+  var org_toneset = [];
+  var cnv_toneset = [];
+  var toneset = [];
+  $(document).ready(function () { /* */
+    for (var i = 0; i < 16; i++) {
+      var insTxt = "";
+      insTxt = "<div class=\"slider-wraper\"><!input class=\"tone\" type=\"text\" size=\"3\" readonly /><div class=\"vslider\" id=\"slider" + (i) + "\" ></div></div>"
+      $('.wraper').append(insTxt);
+    }
+    Tone.Transport.bpm.value = 200;
+    for (var i = 1; i <= 16; i++) {
+      durList.push( Tone.Time("4n").toTicks() * i );
+    }
+    console.log(durList);
+    $(".vslider").slider({
+      orientation: "vertical",
+      range: "min",
+      animate: "fast",
+      min: 0,
+      max: (all_note_org.length - 1),
+      value: 23,
+      change: function (event, ui) { /* $(this).prev().val(all_note[ui.value]); */
+        changeHandle($(".ui-slider-handle", this), ui.value);
+      },
+      slide: function (event, ui) { /* $(this).prev().val(all_note[ui.value]); */
+        changeHandle($(".ui-slider-handle", this), ui.value);
+        if ( ui.value < 22 ) {
+          var synth = new Tone.Synth().toMaster();
+          synth.triggerAttackRelease(all_note_org[ui.value], "8n");
+        }
+      },
+      create: function (event, ui) {
+	/* $(this).prev().val(all_note[$(this).slider("option", "value")]); */
+      },
+      start: function (event, ui) { /* console.log("clicked"); */
+        if ( ui.value < 22 ) {
+          var synth = new Tone.Synth().toMaster();
+          synth.triggerAttackRelease(all_note_org[ui.value], "8n");
+        }
+      },
+    });
+    $(".vslider").each(function (i, e) {
+      $(e).slider("value", "23");
+    });
+  });
+  $(function () {
+    $("#org_music").button().prop("disabled", true);
+    $("#org_music").button("refresh");
+    $("#org_music").button().click(function () {
+      moveSlider(org_toneset);
+      $(".convert-result").val("");
+      $("#org_music").button().prop("disabled", true);
+      $("#org_music").button("refresh");
+      $("#convert-button").button().prop("disabled", false);
+      $("#convert-button").button("refresh");
+    });
+  });
+  $(function () {
+    $("#convert-button").button().click(function () {
+      if (isNotCanConvert()) {
+        $(".convert-result").val("変換不要");
+      } else {
+        org_toneset = createNote();
+        cnv_toneset = convertScale(org_toneset);
+        if (JSON.stringify(cnv_toneset) !== JSON.stringify(org_toneset)) {
+          $(".convert-result").val("変換成功");
+          moveSlider(cnv_toneset);
+          $("#convert-button").button().prop("disabled", true);
+          $("#convert-button").button("refresh");
+          $("#org_music").button().prop("disabled", false);
+          $("#org_music").button("refresh");
+        } else {
+          $(".convert-result").val("変換失敗");
+        }
+      }
+    });
+  });
+  $(function () {
+    $("#startMusic-button").button().click(function () {
+      var synth = new Tone.AMSynth().toMaster();
+      var melody;
+      var tmpToneSet = {};
+      var sampleButtonState = [];
+      var actionButtonState = [];
+
+      $(".loadSample-button").each(function (i, e) {
+        sampleButtonState.push($(e).button("option", "disabled"));
+        $(e).button("disable");
+      });
+      $(".action-button").each(function (i, e) {
+        actionButtonState.push($(e).button("option", "disabled"));
+        $(e).button("disable");
+      });
+      $(".vslider").each(function (i, e) {
+        /* $(e).slider("disable"); */
+      });
+
+      tmpToneSet = createNote();
+      console.log(tmpToneSet);
+
+      function setPlay(time, note) {
+        var slider_count = getSliderCount(note.time);
+        synth.triggerAttackRelease(note.note, Tone.Ticks(note.dur));
+        console.log("note: " + note.note + " dur: " + note.dur);
+      }
+      melody = new Tone.Part(setPlay, tmpToneSet);
+      melody.start();
+      melody.loop = 0;
+
+      var tmpMaxNum = 0;
+      for (var i = 16; i >= 0; i--) {
+        if ( $("#slider" + i).slider("value") < 23 ) {
+          tmpMaxNum = i + 1;
+          break;
+        }
+      }
+
+      var tmpNextTime = Tone.Transport.ticks;
+      for (var i = 0; i < tmpMaxNum ; i++) {
+        var slider_count = 0
+        Tone.Transport.schedule( function() {
+          $(".vslider .ui-slider-handle").css("color", "#000000");
+          $("#slider" + slider_count + " .ui-slider-handle").css("color", "#bb0000");
+          slider_count++;
+        }, tmpNextTime + "i" );
+        tmpNextTime = tmpNextTime + Tone.Time("4n").toTicks();
+      }
+
+      tmpNextTime += Tone.Time("8n").toTicks();
+      Tone.Transport.schedule( function() {
+        $(".vslider .ui-slider-handle").css("color", "#000000");
+        $(".loadSample-button").each(function (i, e) {
+          $(e).button("option", "disabled", sampleButtonState[i] );
+        });
+        $(".action-button").each(function (i, e) {
+          $(e).button("option", "disabled", actionButtonState[i] );
+        });
+        $(".vslider").each(function (i, e) {
+          $(e).slider("enable");
+        });
+      }, tmpNextTime + "i" );
+
+ /*     Tone.Transport.bpm.value = 200;  */
+      Tone.Transport.start();
+    });
+  });
+  $(function () {
+    $(".loadSample-button").button().click(function () {
+      var initial_note = [23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23];
+      var sample_note_nakata = [17, 19, 20, 19, 17, 12, 22, 14, 22, 17, 15, 22, 22, 22, 23, 23];
+      var sample_note_kondoh = [10, 12, 14, 22, 22, 17, 15, 14, 12, 10, 10, 22, 22, 22, 22, 22];
+      var sample_note_cdefgab = [5, 7, 9, 10, 12, 14, 16, 17, 17, 16, 14, 12, 10, 9, 7, 5];
+      var sample_data = $(this).attr('id');
+      switch (sample_data) {
+      case "sample_nakata":
+        org_toneset = sample_note_nakata;
+        break;
+      case "sample_kondoh":
+        org_toneset = sample_note_kondoh;
+        break;
+      case "sample_cdefgab":
+        org_toneset = sample_note_cdefgab;
+        break;
+      default:
+        org_toneset = initial_note;
+      }
+      $(".vslider").each(function (i, e) {
+        $(e).slider("value", org_toneset[i]);
+      });
+      $(".convert-result").val("");
+      $("#org_music").button().prop("disabled", true);
+      $("#org_music").button("refresh");
+      $("#convert-button").button().prop("disabled", false);
+      $("#convert-button").button("refresh");
+    });
+  });
+
+  function isNotCanConvert() {
+    var returnValue = true;
+    $(".vslider").each(function (i, e) {
+      if (cnv_note_org.indexOf(all_note_org[$(e).slider("value")]) === -1) {
+        returnValue = false;
+      }
+    });
+    return returnValue;
+  }
+
+  function changeHandle(selector, silder_val) {
+    if (cnv_note_org.indexOf(all_note_org[silder_val]) >= 0) {
+      selector.css("background", "#88BB88");
+      selector.css("border", "3px solid #005500");
+      selector.text(all_note[silder_val]);
+    } else {
+      selector.css("background", "#BB8888");
+      selector.css("border", "3px solid #550000");
+      selector.text(all_note[silder_val]);
+    }
+  }
+
+  function getSliderCount(input_time) {
+    var setsu = parseInt(input_time.split(":")[0]);
+    var haku = parseInt(input_time.split(":")[1]);
+    return ((setsu * 4) + haku);
+  }
+
+  function moveSlider(input_note) {
+    var slider_index = [];
+    slider_index = getSliderIndex(input_note);
+    $(".vslider").each(function (i, e) {
+      $(e).slider("value", slider_index[i]);
+    });
+  }
+
+  function getSliderIndex(input_note) {
+    var returnNoteIndex = [];
+    for (i = 0; i < 16; i++) {
+      returnNoteIndex.push(all_note_org.indexOf("."));
+    }
+    for (i = 0; i < input_note.length; i++) {
+      returnNoteIndex[getSliderCount(input_note[i].time)] = all_note_org.indexOf(input_note[i].note);
+      for (j = 0; j < durList.indexOf(input_note[i].dur); j++) {
+        returnNoteIndex[(getSliderCount(input_note[i].time)) + j + 1] = all_note_org.indexOf("-");
+      }
+    }
+    return returnNoteIndex;
+  }
+
+  function createNote() { /* インプットデータを作成する */
+    var durTmp = 1;
+    var setsu = 0;
+    var haku = 0;
+    var returnNoteset = [];
+    var noneFlag = false;
+    $(".vslider").each(function (i, e) {
+      var addData = {};
+      addData["time"] = setsu + ":" + haku + ":0";
+      haku++
+      if (haku > 3) {
+        haku = 0;
+        setsu++;
+      }
+      addData["note"] = all_note_org[$(e).slider("value")];
+      if (addData.note === "-") {
+        if (noneFlag) {
+          durTmp++;
+        }
+        if ((i + 1) < 16) {
+          return true;
+        }
+      }
+      if (addData.note === ".") {
+        addData["note"] = null;
+        noneFlag = false;
+      }
+      if (durTmp !== 1) {
+        returnNoteset[returnNoteset.length - 1].dur = durList[durTmp - 1];
+      }
+      durTmp = 1;
+      if (addData.note === null) {
+        addData["dur"] = null;
+      } else if (addData.note !== "-") {
+        addData["dur"] = durList[durTmp - 1];
+        returnNoteset.push(addData);
+        noneFlag = true;
+      }
+    });
+    return returnNoteset;
+  }
+    </script>
+  <style type="text/css">
+  body {
+    -webkit-touch-callout: none;
+
+  }
+
+  .wraper {
+    height: calc( 100vh * 0.7);
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    flex-direction: row;
+    padding-bottom: calc( 100vh * 0.01);
+  }
+
+  .slider-wraper {
+    width: calc( ( ( 100% - ( 5px * 8 * 2)) / 8));
+    margin: calc( 5px);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+  /* .tone { height: calc( 100% * 0.3); width: 100%; border: none; text-align: center; font-size: calc( 100vw / 30); } */
+
+  .vslider {
+    top: 10px;
+    height: calc( (100% * 0.9) - 10px);
+  }
+
+  .vslider .ui-slider-handle {
+    width: calc( ( 100vw / 6) * 0.2 * 3);
+    font-size: calc( ( 100vw / 6) * 0.2);
+    font-weight: bold;
+    text-decoration: none;
+    text-align: center;
+    vertical-align: middle;
+    left: -1.25em;
+    background: #88BB88;
+    border: 3px solid #005500;
+  }
+
+  .button-list {
+    display: flex;
+    font-size: calc( ( 100vw / 10) * 0.3);
+  }
+</style>
+</head>
+<body>
+  <div class="wraper">
+    <!-- <div class="slider-wraper"> <input class="tone" type="text" size="3" readonly /> <div class="vslider" id="slider1" ></div> </div> <div class="slider-wraper"> <input class="tone" type="text" size="3" readonly /> <div class="vslider" id="slider2" ></div> </div> --></div>
+  <div class="button-list">
+    <div class="loadSample"> <button class="loadSample-button" id="initData-button">初期化</button> </div>
+    <div class="loadSample"> <button class="loadSample-button" id="sample_nakata">sample:中田</button> </div>
+    <div class="loadSample"> <button class="loadSample-button" id="sample_kondoh">sample:近藤</button> </div>
+    <div class="loadSample"> <button class="loadSample-button" id="sample_cdefgab">sample</button> </div>
+  </div>
+  <div class="button-list">
+    <div class="startMusic"> <button class="action-button" id="startMusic-button">再生</button> </div>
+    <div class="music-button"> <button class="action-button" id="org_music">変換前</button> </div>
+    <div class="convert-button"> <button class="action-button" id="convert-button">変換後</button> <input class="convert-result" type="text" size="100" style="width:100px; border:none;" readonly /> </div>
+  </div>
+  </div>
+</body>
+</html>
